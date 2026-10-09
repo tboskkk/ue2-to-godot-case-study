@@ -1,0 +1,173 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Case Study: Reverse-Engineering Postal 2 into Godot</title>
+<style>
+  :root {
+    --bg: #ffffff; --text: #1a1a1a; --muted: #5a5f66; --accent: #1f5fa8;
+    --line: #d6dbe1; --head-bg: #f3f5f8; --box-fill: rgba(31, 95, 168, 0.10);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #15181c; --text: #e6e8eb; --muted: #9aa1aa; --accent: #6aa8ee;
+      --line: #343a42; --head-bg: #1d2127; --box-fill: rgba(106, 168, 238, 0.14);
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 17px/1.6 -apple-system, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 48px 16px 64px; }
+  h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 8px; }
+  h2 { font-size: 1.3rem; margin: 40px 0 10px; }
+  .byline { color: var(--muted); margin: 0 0 4px; }
+  .note { color: var(--muted); font-style: italic; font-size: 0.92rem; margin: 0 0 24px; }
+  ul, ol { padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code { font-size: 0.9em; background: var(--head-bg); padding: 1px 5px; border-radius: 4px; }
+  figure { margin: 24px 0; }
+  figure svg { width: 100%; height: auto; display: block; }
+  figcaption { color: var(--muted); font-size: 0.88rem; margin-top: 6px; }
+  .table-wrap { overflow-x: auto; margin: 16px 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.92rem; }
+  th, td { border: 1px solid var(--line); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--head-bg); font-weight: 600; }
+  a { color: var(--accent); }
+  footer { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--line); color: var(--muted); font-size: 0.9rem; }
+  /* diagram tokens */
+  .d-edge { stroke: var(--muted); }
+  .d-box { fill: none; stroke: var(--muted); stroke-width: 1.25; }
+  .d-main { fill: var(--box-fill); stroke: var(--accent); stroke-width: 2; }
+  .d-ink { fill: var(--text); }
+  .d-quiet { fill: var(--muted); }
+  .d-arrow { fill: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Case Study: Reverse-Engineering Postal 2 into Godot</h1>
+  <p class="byline">Tyler | Software Developer | <a href="https://github.com/tboskkk">github.com/tboskkk</a></p>
+  <p class="note">A personal, non-commercial project, not affiliated with or endorsed by Running With Scissors. Postal 2 is a trademark of Running With Scissors, Inc.</p>
+
+  <h2>Summary</h2>
+  <p>In one overnight session, I took Postal 2 (2003, Unreal Engine 2) from an empty folder to a walkable, faithfully lit map running in Godot 4.7. I led the project and made the technical and product decisions; AI coding tools did most of the implementation, inside a review process I set up.</p>
+  <ul>
+    <li><strong>Reverse-engineered</strong> Unreal Engine 2's undocumented package and level formats; the reader parses all 109 base-game maps byte-exact.</li>
+    <li><strong>Built a full asset pipeline</strong>: from game files, through a Python extractor, to a Godot scene, with 539 automated tests.</li>
+    <li><strong>Matched the original look</strong>: reused the game's 2003 baked lighting and rebuilt its hidden skybox system, plus an optional modern rendering mode.</li>
+    <li><strong>Personal, private project</strong>: it reads the player's own Steam copy and ships none of the game's assets or code.</li>
+  </ul>
+
+  <h2>The problem</h2>
+  <p>Godot cannot open anything Postal 2 ships, and none of the formats are documented. Maps are single packed files (with the extension <code>.fuk</code>) holding thousands of serialized objects: compiled BSP geometry, baked lightmaps, terrain, placed props, lights and gameplay actors.</p>
+  <ul>
+    <li><strong>No specification</strong>: every structure had to be inferred from the files themselves and validated against them.</li>
+    <li><strong>Engine quirks</strong>: Postal 2 uses a licensee variant of Unreal Engine 2 with its own changes to the data layout.</li>
+    <li><strong>Fidelity</strong>: the goal was the original look and feel, not an approximation, so lighting, scale and physics had to come from the game's own data.</li>
+    <li><strong>Constraints</strong>: a personal learning project that reads the player's own game copy; no game content is committed or distributed.</li>
+  </ul>
+
+  <h2>My role and approach</h2>
+  <p>I acted as the lead engineer: I set scope and direction, made the architecture and trade-off calls, and judged every result. AI coding agents did most of the typing, inside a process I designed so that nothing landed unreviewed.</p>
+  <ol>
+    <li><strong>Spec</strong>: agree what to build and why, in a written design, before any code.</li>
+    <li><strong>Plan</strong>: break the spec into small tasks, each with exact interfaces and tests.</li>
+    <li><strong>Build</strong>: one agent implements one task, test-first, and commits it.</li>
+    <li><strong>Independent review</strong>: a separate agent reviews each task against the spec; findings go back for fixes until clean.</li>
+    <li><strong>Decide</strong>: I rule on anything the plan didn't cover, logged with its reasoning and cost if wrong.</li>
+  </ol>
+  <p>The result was fast without being sloppy: 12 milestone tasks, each reviewed, plus a whole-branch review before merging.</p>
+
+  <h2>Technical highlights</h2>
+  <p>The core of the work was turning undocumented 2003 binary data into a modern engine scene without losing what made it look like Postal 2.</p>
+  <figure>
+    <svg viewBox="0 0 760 280" role="img" aria-label="Game files become a playable Godot scene in one pipeline" font-size="13" font-family="inherit">
+      <defs><marker id="pipe-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" class="d-arrow"/></marker></defs>
+      <text x="24" y="32" font-size="15" font-weight="600" class="d-ink">Game files become a playable Godot scene in one pipeline</text>
+      <g fill="none" class="d-edge" stroke-width="1.25">
+        <path d="M184 92H206" marker-end="url(#pipe-arrow)"/><path d="M368 92H390" marker-end="url(#pipe-arrow)"/>
+        <path d="M552 92H574" marker-end="url(#pipe-arrow)"/><path d="M104 128V220H206" marker-end="url(#pipe-arrow)"/>
+        <path d="M368 220H472V130" marker-end="url(#pipe-arrow)"/><path d="M656 128V182" marker-end="url(#pipe-arrow)"/>
+      </g>
+      <rect x="24" y="56" width="160" height="72" rx="8" class="d-box"/>
+      <text x="104" y="80" text-anchor="middle" font-weight="600" class="d-ink">Game files</text>
+      <text x="104" y="100" text-anchor="middle" font-size="11.5" class="d-quiet">player's own copy</text>
+      <text x="104" y="116" text-anchor="middle" font-size="11.5" class="d-quiet">maps, textures, meshes</text>
+      <rect x="208" y="56" width="160" height="72" rx="8" class="d-box"/>
+      <text x="288" y="80" text-anchor="middle" font-weight="600" class="d-ink">Python extractor</text>
+      <text x="288" y="100" text-anchor="middle" font-size="11.5" class="d-quiet">package reader</text>
+      <text x="288" y="116" text-anchor="middle" font-size="11.5" class="d-quiet">BSP, terrain, actors</text>
+      <rect x="392" y="56" width="160" height="72" rx="8" class="d-box"/>
+      <text x="472" y="80" text-anchor="middle" font-weight="600" class="d-ink">Extracted data</text>
+      <text x="472" y="100" text-anchor="middle" font-size="11.5" class="d-quiet">level.json, glTF</text>
+      <text x="472" y="116" text-anchor="middle" font-size="11.5" class="d-quiet">lightmaps, textures</text>
+      <rect x="576" y="56" width="160" height="72" rx="8" class="d-box"/>
+      <text x="656" y="80" text-anchor="middle" font-weight="600" class="d-ink">Godot importer</text>
+      <text x="656" y="100" text-anchor="middle" font-size="11.5" class="d-quiet">scene builder</text>
+      <text x="656" y="116" text-anchor="middle" font-size="11.5" class="d-quiet">materials, lighting</text>
+      <rect x="208" y="184" width="160" height="72" rx="8" class="d-box"/>
+      <text x="288" y="208" text-anchor="middle" font-weight="600" class="d-ink">UModel (open source)</text>
+      <text x="288" y="228" text-anchor="middle" font-size="11.5" class="d-quiet">meshes and textures</text>
+      <text x="288" y="244" text-anchor="middle" font-size="11.5" class="d-quiet">checksum-pinned</text>
+      <rect x="576" y="184" width="160" height="72" rx="8" class="d-main"/>
+      <text x="656" y="208" text-anchor="middle" font-weight="600" class="d-ink">Playable scene</text>
+      <text x="656" y="228" text-anchor="middle" font-size="11.5" class="d-ink">original look</text>
+      <text x="656" y="244" text-anchor="middle" font-size="11.5" class="d-ink">Classic or Enhanced</text>
+    </svg>
+    <figcaption>Asset pipeline: game files to playable scene</figcaption>
+  </figure>
+  <p>The extractor handles everything unique to the engine; an existing open-source tool covers standard meshes and textures.</p>
+  <ul>
+    <li><strong>Binary format reverse-engineering</strong>: a Python reader for Unreal Engine 2 packages (names, imports, exports, tagged properties). Each structure was pinned by requiring the parser to consume every object exactly to its stored size, a check that exposes any wrong guess at once.</li>
+    <li><strong>Level geometry</strong>: extracted the compiled BSP (12,206 triangles for the first map), terrain heightmaps with layer blending and 49% hole cut-outs, and 1,592 placed props, all converted to Godot's coordinate system.</li>
+    <li><strong>Lighting fidelity</strong>: reused the game's own baked lightmaps and per-prop vertex lighting, and recreated per-room ambient light from the map's zone data.</li>
+    <li><strong>The skybox</strong>: Postal 2's sky is a small hidden room far outside the map, viewed through a second camera that copies the player's rotation. I rebuilt the same mechanism in Godot.</li>
+    <li><strong>Original physics</strong>: the player's height, speed, jump and gravity come from the game's own class data, not guesses.</li>
+    <li><strong>Asset pipeline</strong>: integrated an existing open-source extraction tool for meshes and textures, pinned by checksum, behind a validated asset index.</li>
+    <li><strong>Optional enhanced mode</strong>: anti-aliasing, ambient occlusion and soft shadows that keep the original brightness and colours, switchable in game.</li>
+  </ul>
+
+  <h2>Problems and decisions</h2>
+  <p>The interesting part of the project was the judgement calls, not the typing.</p>
+  <div class="table-wrap"><table>
+    <tr><th>Problem</th><th>Decision</th><th>Outcome</th></tr>
+    <tr><td>The planned world scale would have made the player 2.9 m tall</td><td>Derived the scale from the character's real collision height in the game data</td><td>Player is 1.8 m, matching the original</td></tr>
+    <tr><td>Static props would have used convex collision, sealing off building interiors</td><td>Switched to per-triangle collision, as the original engine does by default</td><td>Interiors stay walkable</td></tr>
+    <tr><td>A GPU job reset the graphics driver, crashing the desktop</td><td>Probed safe workload sizes, chunked the work and added a watchdog that stops at the first driver timeout</td><td>About 1 hour of processing with zero further resets</td></tr>
+    <tr><td>The first enhanced-graphics preset washed out the sunset</td><td>Rejected it: modern effects may not change brightness or colour; added a test for that rule</td><td>Enhanced mode keeps the original mood</td></tr>
+    <tr><td>Porting the original AI code line by line would copy the studio's code</td><td>Designed a clean-room process: one agent writes plain behaviour specs, another implements from those only, and tuning values are read from the player's own game files</td><td>The repo holds no studio code, data or art</td></tr>
+  </table></div>
+
+  <h2>Results</h2>
+  <p>The first map went from empty folder to walkable in under 3 hours, and to its full original look in about 12.</p>
+  <ul>
+    <li><strong>Coverage</strong>: all 109 base-game maps parse byte-exact; the first map (Suburbs) is fully playable to walk around.</li>
+    <li><strong>Quality gates</strong>: 539 Python tests plus three Godot test suites, all passing; every task independently reviewed.</li>
+    <li><strong>Scale of the first map</strong>: 12,206 BSP triangles, 1,592 props, 167 lights, a 256 x 256 terrain and 37 lighting zones.</li>
+  </ul>
+  <div class="table-wrap"><table>
+    <tr><th>Time (Oct 2026)</th><th>Milestone</th></tr>
+    <tr><td>Oct 8, 7:28 AM</td><td>Classic / Enhanced graphics toggle</td></tr>
+    <tr><td>Oct 8, 6:46 AM</td><td>Skybox room and per-room lighting</td></tr>
+    <tr><td>Oct 8, 5:46 AM</td><td>Original baked lightmaps in place</td></tr>
+    <tr><td>Oct 7, 11:56 PM</td><td>First walkable map, with original player physics</td></tr>
+    <tr><td>Oct 7, 11:22 PM</td><td>First map built as a Godot scene</td></tr>
+    <tr><td>Oct 7, 9:27 PM</td><td>Package reader working</td></tr>
+    <tr><td>Oct 7, 9:04 PM</td><td>Empty project folder</td></tr>
+  </table></div>
+
+  <h2>What's next and what I learned</h2>
+  <p>Next is life in the town: working doors and bystanders, designed as a phased, clean-room reimplementation of the original behaviour on top of an UnrealScript-style state runtime.</p>
+  <ul>
+    <li><strong>AI tools multiply an engineer; they don't replace judgement.</strong> Most of the value I added was deciding what to build, catching what looked wrong, and saying no.</li>
+    <li><strong>Validate against the data, not assumptions.</strong> The strongest checks were the ones the real files could fail: exact byte consumption, every zone actor landing in its own zone, rendered frames compared across versions.</li>
+    <li><strong>Small, reviewed steps beat big ones.</strong> Independent review caught real bugs at every stage, from silent data corruption to video timing drift.</li>
+    <li><strong>Respect the source.</strong> Reading the player's own copy, shipping no content, and planning clean-room behaviour kept the project on the right side of the original creators' work.</li>
+  </ul>
+
+  <footer>Tyler | <a href="https://github.com/tboskkk">github.com/tboskkk</a></footer>
+</main>
+</body>
+</html>
